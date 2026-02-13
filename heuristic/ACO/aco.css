@@ -33,8 +33,8 @@ body{
     width: 20px;
     height: 20px;
     background-color: #fff;
-    -webkit-transition: all 1s linear;
-    transition: all 1s linear;
+    -webkit-transition: all 0.2s linear;
+    transition: all 0.2s linear;
     border-radius: 50%;
     z-index: 110;
 }
@@ -122,24 +122,14 @@ body{
     width: 100%;
     text-align: center;
     color: #fff;
-    font-size: 15px;
+    font-size: 16px;
 }
-#welcome .author{
-    position: relative;
-    width: 125px;
-    margin: auto;
-    margin-top: 25px;
-}
-#welcome .author img{
-    max-width: 32px;
-    max-height: 32px;
-    margin-left: 20px;
-    -webkit-transition: all 0.6s linear;
-    transition: all 0.6s linear;
-}
-#welcome .author img:hover{
-    -webkit-opacity: 0.5;
-    opacity: 0.5;
+#welcome .content .subtitle{
+    width: 100%;
+    text-align: center;
+    color: rgba(255,255,255,0.6);
+    font-size: 12px;
+    margin-top: 5px;
 }
 #welcome .tip{
     position: relative;
@@ -178,13 +168,18 @@ body{
 #welcome .content .btn{
     position: relative;
     margin: auto;
-    width: 120px;
+    width: 140px;
     height: 40px;
     line-height: 40px;
     background-color: #16a085;
     color: #fff;
     text-align: center;
     margin-top: 7%;
+    border-radius: 4px;
+    cursor: pointer;
+}
+#welcome .content .btn:hover{
+    background-color: #1abc9c;
 }
 #startBtn{
     position: fixed;
@@ -205,6 +200,8 @@ body{
 #startBtn:hover{
     background-color: #1abc9c;
 }
+
+/* === Settings Panel === */
 #settingsPanel{
     position: fixed;
     left: 0;
@@ -214,50 +211,70 @@ body{
     background-color: rgba(0, 0, 0, 0.7);
     z-index: 400;
     display: none;
+    overflow-y: auto;
 }
 #settingsPanel .panel-content{
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    transform: translate(-50%, -50%);
+    position: relative;
+    margin: 30px auto;
     background-color: #fff;
-    padding: 30px;
+    padding: 30px 35px;
     border-radius: 8px;
-    min-width: 350px;
+    max-width: 480px;
     box-shadow: 0 4px 12px rgba(0,0,0,0.3);
 }
 #settingsPanel h2{
     text-align: center;
     color: #16a085;
-    margin: 0 0 25px 0;
+    margin: 0 0 10px 0;
     font-size: 20px;
 }
-#settingsPanel .setting-item{
+#settingsPanel .formula{
+    text-align: center;
+    color: #555;
+    font-size: 14px;
+    margin: 0 0 20px 0;
+    font-family: "Times New Roman", serif;
+    font-style: italic;
+}
+#settingsPanel .setting-group{
     margin-bottom: 20px;
+    border-top: 1px solid #eee;
+    padding-top: 12px;
+}
+#settingsPanel .setting-group h3{
+    color: #16a085;
+    font-size: 14px;
+    margin: 0 0 12px 0;
+}
+#settingsPanel .setting-item{
+    margin-bottom: 14px;
     display: flex;
     align-items: center;
 }
 #settingsPanel .setting-item label{
-    width: 120px;
+    width: 150px;
+    min-width: 150px;
     color: #333;
     font-size: 14px;
 }
-#settingsPanel .setting-item input{
+#settingsPanel .setting-item input,
+#settingsPanel .setting-item select{
     flex: 1;
     height: 32px;
     padding: 0 10px;
     border: 1px solid #ddd;
     border-radius: 4px;
     font-size: 14px;
+    max-width: 120px;
 }
 #settingsPanel .setting-item .unit{
     margin-left: 10px;
     color: #999;
-    font-size: 12px;
-    width: 60px;
+    font-size: 11px;
+    flex: 1;
 }
 #settingsPanel .btn-group{
-    margin-top: 30px;
+    margin-top: 20px;
     text-align: center;
 }
 #settingsPanel .btn{
@@ -287,9 +304,6 @@ body{
     0%{
         -webkit-transform: scale(0);
     }
-    /*90%{
-        -webkit-transform: scale(1.2);
-    }*/
     100%{
         -webkit-transform: scale(1);
     }
@@ -299,9 +313,6 @@ body{
     0%{
         transform: scale(0);
     }
-    /*90%{
-        transform: scale(1.2);
-    }*/
     100%{
         transform: scale(1);
     }

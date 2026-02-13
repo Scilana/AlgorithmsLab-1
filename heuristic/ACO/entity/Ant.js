@@ -1,260 +1,247 @@
 /**
-* @Author: BreezeDust
-* @Date:   2016-07-04
-* @Email:  breezedust.com@gmail.com
-* @Last modified by:   BreezeDust
-* @Last modified time: 2016-07-10
-*/
+ * Ant - Standard AS (Ant System) ant-cycle algorithm for grid foraging
+ *
+ * Mathematical model (Dorigo et al., 1996):
+ *   Transition probability:  P_j = [tau_j]^alpha * [eta_j]^beta / SUM_l([tau_l]^alpha * [eta_l]^beta)
+ *   Pheromone deposit:       delta_tau = Q / L  (ant-cycle, deposit after completing path)
+ *   Pheromone evaporation:   tau(t+1) = (1 - rho) * tau(t)  (handled by World)
+ *
+ * Foraging adaptation:
+ *   - FIND_FOOD phase: follow food pheromone (tau = food_pheromone), eta = 1
+ *   - CARRY_FOOD phase: follow home pheromone (tau = home_pheromone), eta = 1/d_home
+ *   - Tabu list: positions already in current path are forbidden
+ *   - Deposit timing: ant-cycle model - deposit Q/L on entire path upon reaching destination
+ */
 
-var World=require("./World.js");
-var Position=require("./Position.js");
-var Direction=require("./Direction.js");
+var World = require("./World.js");
+var Position = require("./Position.js");
+var Direction = require("./Direction.js");
 
-function Ant(word){
-    this._word=word;
-    this.checkList=[];
-    this.homePosition;
-    this.foodPosition;
-    this.dp;
-    this.status;
-    this.lastStatus;
-
-    this.dom;
-    this.step;
+function Ant(world) {
+    this._world = world;
+    this.path = [];            // current path (list of Position references)
+    this.status = null;        // FIND_FOOD or CARRY_FOOD
+    this.homePosition = null;  // home cell reference
+    this.dom = null;
 
     this._init();
 }
-Ant.testN=1;
-// 静态数据
-Ant.STATUS_FIND_FOOD=Position.P_TYPE_HOME;
-Ant.STATUS_CARRY_FOOD=Position.P_TYPE_FOOD;
 
-Ant.CHECK_NOMARL=101;
-Ant.CHECK_BARRIER=102;
-Ant.CHECK_FOOD=103;
-Ant.CHECK_HOME=104;
+// Ant states
+Ant.STATUS_FIND_FOOD = 0;   // searching for food
+Ant.STATUS_CARRY_FOOD = 1;  // carrying food back to home
 
-
-
-Ant.lunpandu = function(whell) { //轮盘赌
-    var nowP = Math.random();
-    var m = 0;
-    var point = 0;
-    for (var i = 0; i < whell.length; i++) {
-        m += whell[i];
-        if (nowP <= m) {
-            point = i;
-            break;
+/**
+ * Roulette wheel selection (standard stochastic universal sampling)
+ * @param {number[]} probs - normalized probability array (sums to 1)
+ * @returns {number} selected index
+ */
+Ant.rouletteWheel = function(probs) {
+    var r = Math.random();
+    var cumulative = 0;
+    for (var i = 0; i < probs.length; i++) {
+        cumulative += probs[i];
+        if (r <= cumulative) {
+            return i;
         }
     }
-    return point;
-}
-Ant.prototype._init=function(){
+    return probs.length - 1;
+};
 
-    // 初始化不同的方向
+/**
+ * Initialize / reset ant to home position
+ */
+Ant.prototype._init = function() {
+    this.path = [];
+    this.status = Ant.STATUS_FIND_FOOD;
+    this.homePosition = this._world.homePosition;
+    this.path.push(this.homePosition);
 
-    this.step=0;
-    this._setStatus(Ant.STATUS_FIND_FOOD);
-    this.homePosition=this._word.map[parseInt(this._word.xl/2)][parseInt(this._word.yl/2)];
-    // TODO  干掉可以调整智能寻路
-    this.foodPosition=null;
-    // TODO
-
-
-    this.checkList=[];
-    this._findPosition(this.homePosition,true);
-    this._addCheckList(this.homePosition);
-    this._word.addCheckList(this.homePosition);
-
-    if(this.dom==null){
-        this.dom=$('<div></div>');
+    if (!this.dom) {
+        this.dom = $('<div></div>');
         $("body").append(this.dom);
         this.dom.addClass("ant");
     }
     this.dom.removeClass("green");
-
-    this.dom.css({
-        left:this.homePosition.x*20,
-        top:this.homePosition.y*20
-    });
-}
-Ant.prototype._getP=function(position,status){
-    var value=0;
-    if(status==Ant.STATUS_FIND_FOOD){
-        if(this.homePosition!=null){
-            // var manhattan=Math.abs(position.x-this.homePosition.x)+Math.abs(position.y-this.homePosition.y);
-            value=World.baseHomePheromone/this.step;
-
-        }
-    }
-    else if(status===Ant.STATUS_CARRY_FOOD){
-        if(this.foodPosition!=null){
-            // var manhattan=Math.abs(position.x-this.foodPosition.x)+Math.abs(position.y-this.foodPosition.y);
-            value=World.baseFoodPheromone/this.step;
-        }
-    }
-    return value<=0.1? 0:value;
+    this._updateDom();
 };
-Ant.prototype._leavePheromone=function(position){
-    position.leavePheromone(this._getP(position,this.status),this.status);
-}
-Ant.prototype._check=function(position){
-    if(position==null){
-        return Ant.CHECK_BARRIER;
+
+/**
+ * Update DOM position to current cell
+ */
+Ant.prototype._updateDom = function() {
+    var pos = this.path[this.path.length - 1];
+    this.dom.css({
+        left: pos.x * this._world.distance,
+        top: pos.y * this._world.distance
+    });
+};
+
+/**
+ * Get all valid (non-null, non-barrier) neighboring positions
+ */
+Ant.prototype._getNeighbors = function(position) {
+    var neighbors = [];
+    for (var i = 0; i < Direction.M.length; i++) {
+        var np = position.move(Direction.M[i], this._world.map);
+        if (np !== null && np.type !== Position.TYPE_BARRIER) {
+            neighbors.push(np);
+        }
     }
-    if(position.x==this.homePosition.x && position.y==this.homePosition.y){
-        return Ant.CHECK_HOME;
+    return neighbors;
+};
+
+/**
+ * Check if position is in current path (tabu list)
+ */
+Ant.prototype._isInPath = function(position) {
+    for (var i = 0; i < this.path.length; i++) {
+        if (this.path[i] === position) return true;
+    }
+    return false;
+};
+
+/**
+ * Standard AS transition probability selection
+ *
+ * P_j = [tau_j]^alpha * [eta_j]^beta / SUM_l([tau_l]^alpha * [eta_l]^beta)
+ *
+ * - FIND_FOOD: tau = food pheromone + tau0, eta = 1
+ * - CARRY_FOOD: tau = home pheromone + tau0, eta = 1 / distance_to_home
+ *
+ * @param {Position} current - current position
+ * @returns {Position|null} selected next position
+ */
+Ant.prototype._selectNext = function(current) {
+    var neighbors = this._getNeighbors(current);
+    if (neighbors.length === 0) return null;
+
+    // --- Tabu filtering (AS tabu list: don't revisit path positions) ---
+    var allowed = [];
+    for (var i = 0; i < neighbors.length; i++) {
+        if (!this._isInPath(neighbors[i])) {
+            allowed.push(neighbors[i]);
+        }
+    }
+    // Deadlock escape: if all neighbors are tabu, allow all
+    if (allowed.length === 0) {
+        allowed = neighbors;
     }
 
-    if(position.type==Position.TYPE_BARRIER){
-        return Ant.CHECK_BARRIER;
+    // --- Compute transition probabilities ---
+    var alpha = World.alpha;
+    var beta = World.beta;
+    var tau0 = World.tau0;
+    var values = [];
+    var sum = 0;
+
+    for (var i = 0; i < allowed.length; i++) {
+        var tau, eta;
+
+        if (this.status === Ant.STATUS_FIND_FOOD) {
+            // Follow food pheromone to find food
+            tau = allowed[i].getP(Position.P_TYPE_FOOD) + tau0;
+            // No heuristic for food search (food location unknown)
+            eta = 1;
+        } else {
+            // Follow home pheromone to return home
+            tau = allowed[i].getP(Position.P_TYPE_HOME) + tau0;
+            // Heuristic: inverse distance to home (visibility, like 1/d_ij in AS)
+            var dx = allowed[i].x - this.homePosition.x;
+            var dy = allowed[i].y - this.homePosition.y;
+            var dist = Math.sqrt(dx * dx + dy * dy);
+            eta = (dist > 0) ? (1.0 / dist) : 100;
+        }
+
+        // Standard AS formula: [tau]^alpha * [eta]^beta
+        var val = Math.pow(tau, alpha) * Math.pow(eta, beta);
+        values.push(val);
+        sum += val;
     }
-    else if (position.type==Position.TYPE_NORMAL) {
-        return Ant.CHECK_NOMARL;
+
+    // Normalize to probability distribution
+    if (sum > 0) {
+        for (var i = 0; i < values.length; i++) {
+            values[i] /= sum;
+        }
+    } else {
+        // Uniform random (fallback)
+        for (var i = 0; i < values.length; i++) {
+            values[i] = 1.0 / values.length;
+        }
     }
-    return Ant.CHECK_FOOD;
 
-}
-Ant.prototype._setStatus=function(status){
-    this.status=status;
-}
-Ant.prototype.move=function(){
-    this.step++;
+    var idx = Ant.rouletteWheel(values);
+    return allowed[idx];
+};
 
-    var lastPosition=this.checkList[this.checkList.length-1];
+/**
+ * Ant-cycle pheromone deposit: deposit Q/L on entire path
+ * Called AFTER ant completes a full path (home->food or food->home)
+ *
+ * @param {number} pType - pheromone type to deposit
+ *   FIND_FOOD deposits P_TYPE_FOOD (guides others to food)
+ *   CARRY_FOOD deposits P_TYPE_HOME (guides others to home)
+ */
+Ant.prototype._depositPheromone = function(pType) {
+    var L = this.path.length;
+    if (L <= 1) return;
 
-    var newPosition=this._findPosition(lastPosition);
+    var deltaTau = World.Q / L;
 
-    // 没有信息素时，回家
-    if(this._getP(lastPosition,this.status)<=World.minPheromone){
+    for (var i = 0; i < L; i++) {
+        this.path[i].addPheromone(deltaTau, pType);
+        // Register cell for rendering
+        this._world.addCheckList(this.path[i]);
+    }
+};
+
+/**
+ * One step of ant movement (called each tick)
+ */
+Ant.prototype.move = function() {
+    var current = this.path[this.path.length - 1];
+    var next = this._selectNext(current);
+
+    // No valid move: reset
+    if (!next) {
         this._init();
         return;
     }
-    var check=this._check(newPosition);
-    if(check==Ant.CHECK_BARRIER){
-        this.dp=Math.floor(Math.random()*Direction.M.length);
-    }
-    else if(check==Ant.CHECK_NOMARL){
-        this._move(newPosition);
-    }
-    else if(check==Ant.CHECK_FOOD){
-        this.step=0;
-        this.checkList=[];
-        this.foodPosition=newPosition;
-        this._setStatus(Ant.STATUS_CARRY_FOOD)
-        this._move(newPosition);
+
+    // --- State transitions ---
+
+    if (next.type === Position.TYPE_FOOD && this.status === Ant.STATUS_FIND_FOOD) {
+        // Found food! Complete home->food path
+        this.path.push(next);
+        // Ant-cycle deposit: food pheromone on entire path (guides others to food)
+        this._depositPheromone(Position.P_TYPE_FOOD);
+        // Switch to carry mode, start new path from food
+        this.status = Ant.STATUS_CARRY_FOOD;
+        this.path = [next];
         this.dom.addClass("green");
-    }
-    else if(check==Ant.CHECK_HOME){
+
+    } else if (next.type === Position.TYPE_HOME && this.status === Ant.STATUS_CARRY_FOOD) {
+        // Returned home with food! Complete food->home path
+        this.path.push(next);
+        // Ant-cycle deposit: home pheromone on entire path (guides others home)
+        this._depositPheromone(Position.P_TYPE_HOME);
+        // Reset: start new foraging trip
         this._init();
-        // if(this.status==Ant.STATUS_FIND_FOOD){
-        //     this._move(newPosition);
-        // }
-        // else if(this.status==Ant.STATUS_CARRY_FOOD){
-        //     this._init();
-        // }
-    }
-};
 
-Ant.prototype._findPosition=function(lastPosition,isStart){
-    var changeWhell = [0.4, 0.2, World.CHANGE_MAX_VALUE, 0.4-World.CHANGE_MAX_VALUE];
-    var change=changeWhell[Ant.lunpandu(changeWhell)];
-    // 探测信息素
-    var findStatus=Ant.STATUS_CARRY_FOOD;
-    if(this.status==Ant.STATUS_CARRY_FOOD){
-        findStatus=Ant.STATUS_FIND_FOOD;
-    }
-    if(this.status==Ant.STATUS_FIND_FOOD && change<=World.CHANGE_MAX_VALUE){
-        // console.log("===>","change",change);
-        this.dp=Math.floor(Math.random()*Direction.M.length);
-    }
-    else{
-        var pheromoneList=[];
-        var allPheromone=0;
-        for (var j = 1; j <= 1; j++) {
-            for (var i = 0; i < Direction.M.length; i++) {
-                var checkP = lastPosition.move(Direction.M[i], this._word.map, j);
-                var check = this._check(checkP);
-                if (check != Ant.CHECK_BARRIER) {
-                    if (this.status == this.lastStatus) {
-                        // 防止小幅度震荡
-                        if (this._getCheckedIndex(checkP) < 0) {
-                            allPheromone+=checkP.getP(findStatus);
-                            pheromoneList.push(checkP);
-                        }
-                    } else {
-                        allPheromone+=checkP.getP(findStatus);
-                        pheromoneList.push(checkP);
-                    }
-
-                }
-            }
-
-        }
-        this.lastStatus=this.status;
-        if(allPheromone>0){
-            var whell=[];
-            for(var k=0;k<pheromoneList.length;k++){
-                whell[k]=pheromoneList[k].getP(findStatus)/allPheromone;
-            }
-            var selectIndex=Ant.lunpandu(whell);
-            console.log(whell,allPheromone);
-            console.log("==>",selectIndex);
-            if(selectIndex>=0 && selectIndex<pheromoneList.length){
-                var newDp=Ant.getNewDirection(lastPosition,pheromoneList[selectIndex]);
-                if(newDp!=-1){
-                    this.dp=newDp;
-                }
-                return pheromoneList[selectIndex];
-            }
-        }
-        else{
-            if(isStart){
-                this.dp=Math.floor(Math.random()*Direction.M.length);
-                if(Ant.testN==0){
-                    Ant.testN++;
-                    console.log("===");
-                    this.dp=Direction.getDP(Direction.U);
-                }
-            }
-        }
+    } else {
+        // Normal movement
+        this.path.push(next);
+        this._world.addCheckList(next);
     }
 
-    return lastPosition.move(Direction.M[this.dp],this._word.map);
-};
-Ant.getNewDirection=function(startP,endP){
-    var direction=[endP.x-startP.x,endP.y-startP.y];
-    if(direction[0]!=0){
-        direction[0]=direction[0]/Math.abs(direction[0]);
+    // Path length limit: prevent infinite wandering
+    if (this.path.length > World.maxPathLength) {
+        this._init();
+        return;
     }
-    if(direction[1]!=0){
-        direction[1]=direction[1]/Math.abs(direction[1]);
-    }
-    return Direction.getDP(direction);
-}
-Ant.prototype._addCheckList=function(position){
-    var insertIndex=this._getCheckedIndex(position);
-    if(insertIndex>=0){
-        this.checkList.splice(insertIndex,1);
-    }
-    this.checkList.push(position);
-};
-Ant.prototype._getCheckedIndex=function(position){
-    for(var i=0;i<this.checkList.length;i++){
-        if(position==this.checkList[i]){
-            return i;
-        }
-    }
-    return -1;
-};
-Ant.prototype._move=function(newPosition){
-    this._addCheckList(newPosition);
-    this._word.addCheckList(newPosition);
-    this._leavePheromone(newPosition);
-    this.dom.css({
-        left:newPosition.x*20,
-        top:newPosition.y*20
-    });
+
+    this._updateDom();
 };
 
-module.exports=Ant;
+module.exports = Ant;

@@ -1,166 +1,148 @@
 /**
-* @Author: BreezeDust
-* @Date:   2016-07-04
-* @Email:  breezedust.com@gmail.com
-* @Last modified by:   BreezeDust
-* @Last modified time: 2016-07-10
-*/
+ * World - Grid environment with standard AS (Ant System) parameters
+ * Based on: Dorigo, Maniezzo & Colorni (1996) "Ant System: Optimization
+ * by a Colony of Cooperating Agents"
+ */
 
+var Position = require("./Position.js");
 
-var Position=require("./Position.js");
-
-function World(width,height,distance){
-    this.map=[];
-    this.width=width;
-    this.height=height;
-    this.distance=distance;
-    this.checkList=[];
-    this.selectedPosition=null;
-    this.xl=parseInt(width/distance);
-    this.yl=parseInt(height/distance);
+function World(width, height, distance) {
+    this.map = [];
+    this.width = width;
+    this.height = height;
+    this.distance = distance;
+    this.checkList = [];       // cells that have been visited (for rendering)
+    this.selectedPosition = null;
+    this.xl = parseInt(width / distance);
+    this.yl = parseInt(height / distance);
+    this.homePosition = null;  // reference to home cell
 
     this._init();
-
 }
-// 静态变量
-World.BASE_PHEROMONE=1;
-World.CHANGE_MAX_VALUE=0.02; // 突变概率
-World.ANT_NUMBER=50; // 蚂蚁数量
 
+// ========== Standard AS Parameters ==========
 
+// Transition probability: P_j = [tau_j]^alpha * [eta_j]^beta / SUM(...)
+World.alpha = 1;               // pheromone importance exponent (alpha >= 0)
+World.beta = 2;                // heuristic importance exponent (beta >= 0)
 
-// 可调参数
-World.volatile=0; // 挥发参数
-World.baseHomePheromone=0; // 家相关信息素起始值
-World.baseFoodPheromone=0; // 食物相关信息素起始值
+// Pheromone update: tau(t+1) = (1 - rho) * tau(t) + delta_tau
+World.rho = 0.02;             // evaporation rate (0 < rho < 1)
 
-World.minPheromone=0; // 最小信息素值
+// Pheromone deposit: delta_tau = Q / L
+World.Q = 100;                // pheromone deposit constant
 
-World.maxPheromoneValue=0; // 最大信息素值
-World.showPheromoneType=0; // 显示那种信息素的分布
+// Base pheromone: small constant added to prevent zero probability
+// Must be small relative to deposit (Q/L) to maintain signal contrast
+World.tau0 = 0.01;            // initial / base pheromone level
 
-World.prototype._init=function(){
+// Simulation parameters
+World.ANT_NUMBER = 50;        // number of ants (m)
+World.maxPathLength = 500;    // max steps before ant resets
+World.stepsPerTick = 5;       // ant steps per simulation tick
 
-    var maxLength=parseInt(Math.sqrt(this.xl*this.xl +this.yl*this.yl));
-    World.baseHomePheromone=maxLength*World.BASE_PHEROMONE;
-    World.baseFoodPheromone=maxLength*World.BASE_PHEROMONE;
+// Visualization
+World.showPheromoneType = Position.P_TYPE_FOOD; // which pheromone to display
 
-    World.minPheromone=World.BASE_PHEROMONE;
-    World.volatile=World.BASE_PHEROMONE/2;
-    World.maxPheromoneValue=World.baseHomePheromone;
-    World.showPheromoneType=Position.P_TYPE_HOME;
-
-    console.log("World.volatile",World.volatile);
-    console.log("World.baseHomePheromone",World.baseHomePheromone);
-    console.log("World.baseFoodPheromone",World.baseFoodPheromone);
-    console.log("World.minPheromone",World.minPheromone);
-    console.log("World.minPheromone",World.showPheromoneType);
-
-
-    for(var i=0;i<this.xl;i++){
-        this.map[i]=[];
-        for(var j=0;j<this.yl;j++){
-            this.map[i][j]=new Position(this,i,j);
+World.prototype._init = function() {
+    // Build grid
+    for (var i = 0; i < this.xl; i++) {
+        this.map[i] = [];
+        for (var j = 0; j < this.yl; j++) {
+            this.map[i][j] = new Position(this, i, j);
         }
     }
 
-    // var foodX=2;
-    // var foodY=5;
-    // this.map[foodX][foodY]=new Position(this,foodX,foodY,Number.MAX_VALUE,0,Position.TYPE_FOOD);
-    // this.map[foodX][foodY].showFood();
-
-    // foodX=4;
-    // foodY=12;
-    // this.map[foodX][foodY]=new Position(foodX,foodY,Number.MAX_VALUE,0,Position.TYPE_FOOD);
-    // this.map[foodX][foodY].showFood();
-
-    // foodX=parseInt(this.xl/2);
-    // foodY=0;
-    // this.map[foodX][foodY]=new Position(this,foodX,foodY,Number.MAX_VALUE,0,Position.TYPE_FOOD);
-    // this.map[foodX][foodY].showFood();
-
-    var homeX=parseInt(this.xl/2);
-    var homeY=parseInt(this.yl/2);
-    this.map[homeX][homeY]=new Position(this,homeX,homeY,0,Number.MAX_VALUE,Position.TYPE_HOME);
+    // Place home at center
+    var homeX = parseInt(this.xl / 2);
+    var homeY = parseInt(this.yl / 2);
+    this.map[homeX][homeY] = new Position(this, homeX, homeY, 0, Number.MAX_VALUE, Position.TYPE_HOME);
     this.map[homeX][homeY].showHome();
+    this.homePosition = this.map[homeX][homeY];
 
-    var that=this;
-    $("#selectPlane").click(function(){
+    // UI: click-to-place food/barrier
+    var that = this;
+    $("#selectPlane").click(function() {
         $("#innerSelectPlane").removeClass("scaleOutAnim");
-        $("#selectPlane").css({
-            display:"none"
-        });
+        $("#selectPlane").css({ display: "none" });
     });
-    $("#innerSelectPlane .food").click(function(){
-        if(that.selectedPosition!=null){
+    $("#innerSelectPlane .food").click(function() {
+        if (that.selectedPosition != null) {
             that.selectedPosition.changeType(Position.TYPE_FOOD);
         }
     });
-    $("#innerSelectPlane .barrier").click(function(){
-        if(that.selectedPosition!=null){
+    $("#innerSelectPlane .barrier").click(function() {
+        if (that.selectedPosition != null) {
             that.selectedPosition.changeType(Position.TYPE_BARRIER);
         }
-     });
-}
-World.prototype.clickPosition=function(position){
-    this.selectedPosition=position;
-    var height=30;
-    var width=60;
-    var left=0;
-    var top=0;
-    if(position.y*20>height*1.5){
-        top=position.y*20-height;
-    }
-    else{
-        top=position.y*20+height;
-    }
-    if(position.x*20>width/2){
-        left=position.x*20-width/2+10;
-    }
-    else if((this.xl-position.x)*20<width/2){
-        left=position.x*20-width;
-    }
-    else{
-        left=0;
-    }
-    $("#selectPlane").css({
-        display:"block"
     });
-    $("#innerSelectPlane").css({
-        top:top,
-        left:left
-    });
+};
+
+/**
+ * Show position selection popup
+ */
+World.prototype.clickPosition = function(position) {
+    this.selectedPosition = position;
+    var height = 30;
+    var width = 60;
+    var left = 0;
+    var top = 0;
+    if (position.y * 20 > height * 1.5) {
+        top = position.y * 20 - height;
+    } else {
+        top = position.y * 20 + height;
+    }
+    if (position.x * 20 > width / 2) {
+        left = position.x * 20 - width / 2 + 10;
+    } else if ((this.xl - position.x) * 20 < width / 2) {
+        left = position.x * 20 - width;
+    } else {
+        left = 0;
+    }
+    $("#selectPlane").css({ display: "block" });
+    $("#innerSelectPlane").css({ top: top, left: left });
     $("#innerSelectPlane").addClass("scaleOutAnim");
-}
-World.prototype.addCheckList=function(position){
-    var insertIndex=this._getCheckedIndex(position);
-    if(insertIndex>=0){
-        this.checkList.splice(insertIndex,1);
+};
+
+/**
+ * Register a cell as visited (for rendering optimization)
+ */
+World.prototype.addCheckList = function(position) {
+    var idx = this._getCheckedIndex(position);
+    if (idx >= 0) {
+        this.checkList.splice(idx, 1);
     }
     this.checkList.push(position);
 };
-World.prototype._getCheckedIndex=function(position){
-    for(var i=0;i<this.checkList.length;i++){
-        if(position==this.checkList[i]){
-            return i;
-        }
+
+World.prototype._getCheckedIndex = function(position) {
+    for (var i = 0; i < this.checkList.length; i++) {
+        if (position === this.checkList[i]) { return i; }
     }
     return -1;
 };
-World.prototype.volatitlePheromone=function(){
-    var max=0;
-    for(var i=0;i<this.checkList.length;i++){
-        var position=this.map[this.checkList[i].x][this.checkList[i].y];
-        if(position.type==Position.TYPE_NORMAL && position.getP(World.showPheromoneType)>max){
-            max=position.getP(World.showPheromoneType);
+
+/**
+ * Standard AS evaporation: tau = (1 - rho) * tau
+ * Applied to all visited cells, then render pheromone visualization
+ */
+World.prototype.evaporateAndRender = function() {
+    var maxP = 0;
+    for (var i = 0; i < this.checkList.length; i++) {
+        var pos = this.checkList[i];
+        // Evaporate
+        pos.evaporatePheromone(World.rho);
+        // Track max for visualization normalization
+        var p = pos.getP(World.showPheromoneType);
+        if (pos.type === Position.TYPE_NORMAL && p > maxP) {
+            maxP = p;
         }
-        position.volatitlePheromone(World.volatile);
-        position.showPheromone(World.maxPheromoneValue,World.showPheromoneType);
     }
-    // console.log("====>",max);
-    // World.maxPheromoneValue=max;
-}
-World.prototype.getPosition=function(x,y){
-    return this.map[x][y];
-}
-module.exports=World;
+    // Render pheromone with dynamic max normalization
+    var renderMax = maxP > 0 ? maxP : 1;
+    for (var i = 0; i < this.checkList.length; i++) {
+        this.checkList[i].showPheromone(renderMax, World.showPheromoneType);
+    }
+};
+
+module.exports = World;

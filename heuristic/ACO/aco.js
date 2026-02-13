@@ -1,114 +1,133 @@
 /**
- * @Author: BreezeDust
- * @Date:   2016-07-04
- * @Email:  breezedust.com@gmail.com
-* @Last modified by:   BreezeDust
-* @Last modified time: 2016-07-10
+ * Standard Ant System (AS) Foraging Simulation
+ * Based on: Dorigo, Maniezzo & Colorni (1996)
+ * "Ant System: Optimization by a Colony of Cooperating Agents"
+ *
+ * Ant-cycle model adapted for grid-based foraging:
+ *   - Transition probability: P_j = [tau_j]^alpha * [eta_j]^beta / SUM(...)
+ *   - Pheromone evaporation:  tau(t+1) = (1 - rho) * tau(t)
+ *   - Pheromone deposit:      delta_tau = Q / L  (after completing path)
  */
- require("./lib/zepto.js");
- require("./lib/grid.js");
+require("./lib/zepto.js");
+require("./lib/grid.js");
 
-var Ant=require("./entity/Ant.js");
-var World=require("./entity/World.js");
-var Position=require("./entity/Position.js");
+var Ant = require("./entity/Ant.js");
+var World = require("./entity/World.js");
+var Position = require("./entity/Position.js");
 
 (function() {
+
     function initGridBg() {
         var canvas = document.getElementById('gridBg');
         var ctx = canvas.getContext('2d');
-        canvas.width=window.innerWidth;
-        canvas.height=window.innerHeight;
-        console.log(canvas.width, canvas.height,window.innerWidth,window.innerHeight);
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
         var opts = {
             distance: 20,
-            lineWidth: 0.1,
+            lineWidth: 0.5,
             gridColor: "#fff",
             caption: false
         };
         new Grid(opts).draw(ctx);
     }
-    function start(){
+
+    function start() {
         var world;
-        var antList=[];
-        var isRun=false;
-        var isSimulationStarted = false; // 仿真启动标志
-        var isSettingsApplied = false; // 参数是否已设置
-        function _run(){
-            if(!isRun){
-                isRun=true;
+        var antList = [];
+        var isRun = false;
+        var isSimulationStarted = false;
+        var isSettingsApplied = false;
 
-                // 只在世界初始化后才执行
-                if(world && isSettingsApplied){
-                    world.volatitlePheromone();
+        function _run() {
+            if (!isRun) {
+                isRun = true;
 
-                    // 只在仿真启动后才创建和移动蚂蚁
-                    if(isSimulationStarted){
-                        if(antList.length<World.ANT_NUMBER){
-                            antList.push(new Ant(world));
-                        }
-                        // console.log("---->");
-                        for(var i=0;i<antList.length;i++){
+                if (world && isSettingsApplied && isSimulationStarted) {
+                    // Spawn ants up to configured count
+                    while (antList.length < World.ANT_NUMBER) {
+                        antList.push(new Ant(world));
+                    }
+
+                    // Multiple ant steps per tick to match evaporation timescale
+                    // This is critical: without it, pheromone evaporates before
+                    // ants can complete paths and the feedback loop never forms
+                    for (var step = 0; step < World.stepsPerTick; step++) {
+                        for (var i = 0; i < antList.length; i++) {
                             antList[i].move();
                         }
                     }
+
+                    // Evaporate once per tick (after all steps), then render
+                    world.evaporateAndRender();
                 }
 
-                isRun=false;
+                isRun = false;
             }
 
-            var delay=800;
-            setTimeout(function(){
+            setTimeout(function() {
                 _run();
-            },delay);
+            }, 100);
         }
         _run();
 
-        // 进入按钮：关闭欢迎页，显示参数设置窗口
-        $("#enter").click(function(){
+        // --- UI Event Handlers ---
+
+        // Enter button: close welcome, show settings
+        $("#enter").click(function() {
             $("#welcome").hide();
             $("#settingsPanel").show();
         });
 
-        // 设置完成按钮：应用参数，初始化世界，显示开始实验按钮
-        $("#setBtn").click(function(){
-            // 获取用户设置的参数
-            var antNumber = parseInt($("#antNumber").val()) || 50;
-            var changeRate = parseFloat($("#changeRate").val()) || 0.02;
-            var basePheromone = parseFloat($("#basePheromone").val()) || 1;
-            var volatileRate = parseFloat($("#volatileRate").val()) || 0.5;
-            var minPheromone = parseFloat($("#minPheromone").val()) || 1;
-            var maxPheromone = parseFloat($("#maxPheromone").val()) || 100;
+        // Apply settings button
+        $("#setBtn").click(function() {
+            // Read AS parameters from UI
+            World.alpha        = parseFloat($("#paramAlpha").val()) || 1;
+            World.beta         = parseFloat($("#paramBeta").val()) || 2;
+            World.rho          = parseFloat($("#paramRho").val()) || 0.02;
+            World.Q            = parseFloat($("#paramQ").val()) || 100;
+            World.tau0         = parseFloat($("#paramTau0").val()) || 0.01;
+            World.ANT_NUMBER   = parseInt($("#paramAntNumber").val()) || 50;
+            World.maxPathLength = parseInt($("#paramMaxSteps").val()) || 500;
+            World.stepsPerTick = parseInt($("#paramStepsPerTick").val()) || 5;
 
-            // 应用参数到World类
-            World.ANT_NUMBER = antNumber;
-            World.CHANGE_MAX_VALUE = changeRate;
-            World.BASE_PHEROMONE = basePheromone;
+            // Pheromone visualization type
+            var showType = $("#paramShowType").val();
+            World.showPheromoneType = (showType === "home")
+                ? Position.P_TYPE_HOME
+                : Position.P_TYPE_FOOD;
 
-            // 初始化世界（在参数设置后）
+            // Initialize world (after parameters are set)
             world = new World(window.innerWidth, window.innerHeight, 20);
             window.world = world;
 
-            // 应用额外参数（需要在world初始化后设置）
-            World.volatile = volatileRate;
-            World.minPheromone = minPheromone;
-            World.maxPheromoneValue = maxPheromone;
+            // Log parameters
+            console.log("=== AS Parameters ===");
+            console.log("alpha =", World.alpha);
+            console.log("beta  =", World.beta);
+            console.log("rho   =", World.rho);
+            console.log("Q     =", World.Q);
+            console.log("tau0  =", World.tau0);
+            console.log("m     =", World.ANT_NUMBER);
+            console.log("maxL  =", World.maxPathLength);
+            console.log("steps/tick =", World.stepsPerTick);
 
-            // 隐藏设置面板，显示开始按钮
+            // Hide settings, show start button
             $("#settingsPanel").hide();
             $("#startBtn").show();
             isSettingsApplied = true;
         });
 
-        // 开始实验按钮：启动仿真，蚂蚁开始出现
-        $("#startBtn").click(function(){
-            if(!isSettingsApplied){
-                alert("请先设置参数！");
+        // Start simulation button
+        $("#startBtn").click(function() {
+            if (!isSettingsApplied) {
+                alert("Please set parameters first!");
                 return;
             }
             isSimulationStarted = true;
             $(this).hide();
         });
     }
+
     initGridBg();
     start();
 
