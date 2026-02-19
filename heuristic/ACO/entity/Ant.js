@@ -57,6 +57,11 @@ Ant.prototype._init = function() {
     this.homePosition = this._world.homePosition;
     this.path.push(this.homePosition);
 
+    // Random max path length per ant to stagger resets
+    var min = World.maxPathLength;
+    var max = World.maxPathLengthMax;
+    this._maxPath = min + Math.floor(Math.random() * (max - min + 1));
+
     if (!this.dom) {
         this.dom = $('<div></div>');
         $("body").append(this.dom);
@@ -235,8 +240,8 @@ Ant.prototype.move = function() {
         this._world.addCheckList(next);
     }
 
-    // Path length limit: prevent infinite wandering
-    if (this.path.length > World.maxPathLength) {
+    // Path length limit: prevent infinite wandering (per-ant random threshold)
+    if (this.path.length > this._maxPath) {
         this._init();
         return;
     }

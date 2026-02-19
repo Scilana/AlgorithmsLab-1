@@ -38,7 +38,8 @@ World.tau0 = 0.01;            // initial / base pheromone level
 
 // Simulation parameters
 World.ANT_NUMBER = 50;        // number of ants (m)
-World.maxPathLength = 500;    // max steps before ant resets
+World.maxPathLength = 1500;   // min steps before ant resets
+World.maxPathLengthMax = 2000; // max steps (each ant gets random value in [min, max])
 World.stepsPerTick = 5;       // ant steps per simulation tick
 
 // Visualization

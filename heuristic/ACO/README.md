@@ -1,39 +1,85 @@
-## 简单蚁群算法实验模拟
+# 标准蚁群算法 (Ant System) 仿真实验平台
 
-+ [文章地址](http://breezedust.com/2016/07/10/zi-hua-yi-qun-suan-fa-jian-dan-mo-ni-shi-li/)
-+ [Demo](http://lab.breezedust.com/aco/)
+基于 Dorigo, Maniezzo & Colorni (1996) 提出的标准 Ant System 模型，搭建的网格化蚂蚁觅食路径涌现虚拟仿真平台。用于蚁群算法参数敏感性研究。
 
-### 使用
+## 数学模型
 
-```js
-npm run install
+本平台严格实现了 AS 模型的三个核心机制：
+
+**转移概率**
+
+$$P_{ij}^{k} = \frac{[\tau_{ij}]^{\alpha} \cdot [\eta_{ij}]^{\beta}}{\sum_{l \in N_i^k} [\tau_{il}]^{\alpha} \cdot [\eta_{il}]^{\beta}}$$
+
+**信息素挥发（乘法式）**
+
+$$\tau_{ij}(t+1) = (1 - \rho) \cdot \tau_{ij}(t)$$
+
+**信息素释放（Ant-Cycle 模型）**
+
+$$\Delta\tau_{ij}^{k} = Q / L_k$$
+
+蚂蚁在完成完整路径后，回溯整条路径一次性释放信息素，路径越短释放量越大。
+
+## 使用方法
+
+```bash
+npm install
 npm run start
 ```
-打开浏览器 http://localhost:8080
 
-### 参数调整
+打开浏览器访问 http://localhost:8080
 
+构建生产版本：
 
-以下为world可修改参数`entity/World.js`
-
-```
-// 静态变量
-World.BASE_PHEROMONE=1; //
-World.CHANGE_MAX_VALUE=0.02; // 突变概率
-World.ANT_NUMBER=50; // 蚂蚁数量
-
-
-
-// 可调参数
-World.volatile=0; // 信息素挥发参数
-World.baseHomePheromone=0; // 家相关信息素起始值
-World.baseFoodPheromone=0; // 食物相关信息素起始值
-
-World.minPheromone=0; // 最小散播信息素值,指达到这个值后，蚂蚁自动被重置
-
-World.maxPheromoneValue=0; // 最大信息素值
-World.showPheromoneType=0; // 显示那种信息素的分布图
+```bash
+npm run build
 ```
 
-+ demo参数的赋值见`entity/World:_init()`
-+ 蚂蚁运动相关见`entity/Ant`
+## 仿真操作流程
+
+1. 打开页面后，在网格上点击放置**食物源**（橙色）和**障碍物**（灰色），巢穴（蓝色）固定在网格中心
+2. 点击「进入参数设置」，调节 AS 模型参数
+3. 点击「设置完成」→「开始实验」，观察蚂蚁觅食路径的涌现过程
+4. 信息素浓度通过网格单元的透明度可视化（越亮浓度越高）
+
+## 可调参数
+
+所有参数通过页面设置面板调节，对应 `entity/World.js` 中的静态属性：
+
+| 参数 | 符号 | 默认值 | 说明 |
+|------|------|--------|------|
+| 信息素重要程度 | α | 1 | 转移概率中信息素的指数权重，α=0 时退化为随机游走 |
+| 启发式重要程度 | β | 2 | 转移概率中距离信息的指数权重 |
+| 挥发率 | ρ | 0.02 | 每 tick 信息素乘法衰减系数，半衰期 ≈ ln2/ρ |
+| 释放常数 | Q | 100 | ant-cycle 释放公式常数，Δτ = Q/L |
+| 基础信息素 | τ₀ | 0.01 | 防止零概率的信息素常数 |
+| 蚂蚁数量 | m | 50 | 仿真中的蚂蚁总数 |
+| 最大步数 | — | 1500~2000 | 每只蚂蚁在区间内随机取值，错开回巢时间 |
+| 每 tick 步数 | s | 5 | 每个仿真周期蚂蚁的移动步数 |
+
+## 项目结构
+
+```
+├── aco.js              # 主程序入口，仿真循环与参数绑定
+├── aco.css             # 样式
+├── index.html          # 页面与参数设置面板
+├── entity/
+│   ├── Ant.js          # 蚂蚁行为：AS 转移概率、ant-cycle 释放、禁忌列表
+│   ├── Position.js     # 网格单元：双信息素存储、乘法挥发、浓度渲染
+│   ├── World.js        # 世界模型：AS 参数定义、信息素全局挥发
+│   └── Direction.js    # 八方向移动定义
+├── grid.js             # 背景网格绘制
+├── webpack.config.js   # Webpack 构建配置
+└── package.json
+```
+
+## 关键设计
+
+- **双信息素机制**：每个网格单元存储食物信息素 τ_food（引导觅食）和巢穴信息素 τ_home（引导回家）
+- **不对称启发式**：觅食时 η=1（食物位置未知），返巢时 η=1/d_home（巢穴位置已知）
+- **时间尺度匹配**：每 tick 先执行 s 步移动，再统一执行一次挥发，确保信息素半衰期与蚂蚁路径完成时间匹配
+- **动态归一化可视化**：信息素浓度按当前全局最大值归一化渲染，适应不同参数下的浓度量级
+
+## 参考文献
+
+Dorigo M, Maniezzo V, Colorni A. Ant system: optimization by a colony of cooperating agents[J]. IEEE Transactions on Systems, Man, and Cybernetics, Part B, 1996, 26(1): 29-41.

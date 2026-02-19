@@ -87,7 +87,8 @@ var Position = require("./entity/Position.js");
             World.Q            = parseFloat($("#paramQ").val()) || 100;
             World.tau0         = parseFloat($("#paramTau0").val()) || 0.01;
             World.ANT_NUMBER   = parseInt($("#paramAntNumber").val()) || 50;
-            World.maxPathLength = parseInt($("#paramMaxSteps").val()) || 500;
+            World.maxPathLength = parseInt($("#paramMaxSteps").val()) || 1500;
+            World.maxPathLengthMax = parseInt($("#paramMaxStepsMax").val()) || 2000;
             World.stepsPerTick = parseInt($("#paramStepsPerTick").val()) || 5;
 
             // Pheromone visualization type
@@ -108,7 +109,7 @@ var Position = require("./entity/Position.js");
             console.log("Q     =", World.Q);
             console.log("tau0  =", World.tau0);
             console.log("m     =", World.ANT_NUMBER);
-            console.log("maxL  =", World.maxPathLength);
+            console.log("maxL  =", World.maxPathLength, "~", World.maxPathLengthMax);
             console.log("steps/tick =", World.stepsPerTick);
 
             // Hide settings, show start button
