@@ -61,6 +61,11 @@ World.prototype._init = function() {
     this.map[homeX][homeY].showHome();
     this.homePosition = this.map[homeX][homeY];
 
+    // Auto-place food and barrier for the standard experiment layout:
+    //   food  : directly above home, 15 cells up
+    //   barrier: 3 rows below food, asymmetric (13 cells left, 5 cells right of home column)
+    this._autoSetup();
+
     // UI: click-to-place food/barrier
     var that = this;
     $("#selectPlane").click(function() {
@@ -143,6 +148,32 @@ World.prototype.evaporateAndRender = function() {
     var renderMax = maxP > 0 ? maxP : 1;
     for (var i = 0; i < this.checkList.length; i++) {
         this.checkList[i].showPheromone(renderMax, World.showPheromoneType);
+    }
+};
+
+/**
+ * Auto-place the standard experiment layout:
+ *   - Food:    same column as home, 15 rows above
+ *   - Barrier: 3 rows below food, spanning homeX-13 to homeX+5 (asymmetric)
+ */
+World.prototype._autoSetup = function() {
+    var homeX = this.homePosition.x;
+    var homeY = this.homePosition.y;
+
+    // Food: 15 cells above home
+    var foodY = homeY - 15;
+    if (foodY >= 0 && foodY < this.yl) {
+        this.map[homeX][foodY].changeType(Position.TYPE_FOOD);
+    }
+
+    // Barrier: 3 rows below food (homeY - 12), asymmetric left-heavy
+    var barrierY = homeY - 12;
+    if (barrierY >= 0 && barrierY < this.yl) {
+        for (var bx = homeX - 13; bx <= homeX + 5; bx++) {
+            if (bx >= 0 && bx < this.xl) {
+                this.map[bx][barrierY].changeType(Position.TYPE_BARRIER);
+            }
+        }
     }
 };
 

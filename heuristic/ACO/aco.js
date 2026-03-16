@@ -37,12 +37,14 @@ var Position = require("./entity/Position.js");
         var isRun = false;
         var isSimulationStarted = false;
         var isSettingsApplied = false;
+        var tickCount = 0;
+        var isPaused = false;
 
         function _run() {
             if (!isRun) {
                 isRun = true;
 
-                if (world && isSettingsApplied && isSimulationStarted) {
+                if (world && isSettingsApplied && isSimulationStarted && !isPaused) {
                     // Spawn ants up to configured count
                     while (antList.length < World.ANT_NUMBER) {
                         antList.push(new Ant(world));
@@ -59,6 +61,9 @@ var Position = require("./entity/Position.js");
 
                     // Evaporate once per tick (after all steps), then render
                     world.evaporateAndRender();
+
+                    tickCount++;
+                    $("#tickValue").text(tickCount);
                 }
 
                 isRun = false;
@@ -118,6 +123,16 @@ var Position = require("./entity/Position.js");
             isSettingsApplied = true;
         });
 
+        // Pause / resume button
+        $("#pauseBtn").click(function() {
+            isPaused = !isPaused;
+            if (isPaused) {
+                $(this).addClass("paused").text("继续");
+            } else {
+                $(this).removeClass("paused").text("暂停");
+            }
+        });
+
         // Start simulation button
         $("#startBtn").click(function() {
             if (!isSettingsApplied) {
@@ -125,6 +140,11 @@ var Position = require("./entity/Position.js");
                 return;
             }
             isSimulationStarted = true;
+            isPaused = false;
+            tickCount = 0;
+            $("#tickValue").text(0);
+            $("#tickCounter").show();
+            $("#pauseBtn").show().removeClass("paused").text("暂停");
             $(this).hide();
         });
     }
